@@ -1,0 +1,93 @@
+image:
+  registry: docker.io
+  repository: phongleduc/payment-api
+  tag: latest
+  pullPolicy: Always
+
+replicaCount: 1
+
+# Thêm các tùy chỉnh tên
+nameOverride: "dotnet-core-api"
+fullnameOverride: "payment-api-service"
+
+imagePullSecrets:
+  - name: regcred
+
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8080
+  name: payment-api-service
+
+# Tên deployment tùy chỉnh
+deployment:
+  name: payment-api-deployment
+
+# Tên ingress tùy chỉnh
+ingress:
+  enabled: true
+  name: payment-api-ingress
+  ingressClassName: nginx
+  hostname: payment-api.cuder.xyz
+  path: /
+  pathType: Prefix
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  tls: true
+  extraTls:
+    - hosts:
+        - payment-api.cuder.xyz
+      secretName: payment-api-tls
+
+containerPorts:
+  http: 8081
+
+# Môi trường từ Secret
+extraEnvVarsFromSecret:
+  - secretName: payment-api-secret
+    name: ConnectionStrings__DefaultConnection
+    envVar: ConnectionStrings__DefaultConnection
+
+  - secretName: shared-secret
+    name: RabbitMq__UserName
+    envVar: RabbitMq__UserName
+
+  - secretName: shared-secret
+    name: RabbitMq__Password
+    envVar: RabbitMq__Password
+
+# Môi trường từ ConfigMap
+extraEnvVarsFromConfigMap:
+  - configMapName: shared-config
+    name: RabbitMq__Host
+    envVar: RabbitMq__Host
+
+  - configMapName: shared-config
+    name: RabbitMq__Port
+    envVar: RabbitMq__Port
+
+  - configMapName: shared-config
+    name: Logging__LogLevel__Default
+    envVar: Logging__LogLevel__Default
+
+  - configMapName: shared-config
+    name: Logging__LogLevel__Microsoft.AspNetCore
+    envVar: Logging__LogLevel__Microsoft.AspNetCore
+
+# Biến môi trường cố định
+extraEnvVars:
+  - name: ASPNETCORE_ENVIRONMENT
+    value: "Production"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
