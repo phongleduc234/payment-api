@@ -1,4 +1,4 @@
-name: Build and Deploy Order API
+name: Build and Deploy Payment API
 
 on:
   push:
@@ -32,8 +32,8 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/order-api:latest .
-          docker push ${{ secrets.DOCKER_USERNAME }}/order-api:latest
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/payment-api:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/payment-api:latest
 
   deploy:
     needs: build
@@ -73,8 +73,8 @@ jobs:
 
       - name: Apply Kubernetes deployment
         run: |
-          ssh ssh.cuder.xyz "helm upgrade --install order-api devops-charts/dotnet-core-api \
+          ssh ssh.cuder.xyz "helm upgrade --install payment-api devops-charts/dotnet-core-api \
                              --namespace devops --create-namespace \
                              -f /tmp/values.yaml \
-                             --set image.repository=${{ secrets.DOCKER_USERNAME }}/order-api \
+                             --set image.repository=${{ secrets.DOCKER_USERNAME }}/payment-api \
                              --set image.tag=latest"
