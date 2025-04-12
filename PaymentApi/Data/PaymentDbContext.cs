@@ -31,7 +31,9 @@ namespace PaymentApi.Data
 
     public enum PaymentStatus
     {
+        Failed = -1,
         Pending,
+        Processing,
         Processed,
         Refunded
     }
@@ -42,6 +44,9 @@ namespace PaymentApi.Data
         public decimal Amount { get; set; }
         public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        public string? Notes;
     }
 
     public class OutboxMessage
@@ -51,5 +56,7 @@ namespace PaymentApi.Data
         public string EventData { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool Processed { get; set; }
+        public int RetryCount { get; set; }
+        public DateTime? ProcessedAt { get; set; }
     }
 }

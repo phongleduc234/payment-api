@@ -2,7 +2,7 @@ using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PaymentApi.Data;
-using PaymentApi.Shared;
+using SharedContracts.Events;
 
 namespace PaymentApi.Controllers
 {
@@ -41,7 +41,7 @@ namespace PaymentApi.Controllers
                 await _context.SaveChangesAsync();
 
                 // Publish event thành công
-                await _bus.Publish(new PaymentProcessed(request.CorrelationId, true));
+                await _bus.Publish(new PaymentProcessed(request.CorrelationId, request.OrderId, true));
                 await transaction.CommitAsync();
 
                 return Ok(payment);
@@ -52,7 +52,7 @@ namespace PaymentApi.Controllers
                 _logger.LogError(ex, "Payment processing failed");
 
                 // Publish event thất bại
-                await _bus.Publish(new PaymentProcessed(request.CorrelationId, false));
+                await _bus.Publish(new PaymentProcessed(request.CorrelationId, request.OrderId, false));
                 return StatusCode(500, "Payment processing failed");
             }
         }
@@ -71,4 +71,6 @@ namespace PaymentApi.Controllers
             return Ok(payment);
         }
     }
+    public record ProcessPaymentRequest(Guid CorrelationId, Guid OrderId, decimal Amount);
+    public record RefundPaymentRequest(Guid OrderId);
 }
