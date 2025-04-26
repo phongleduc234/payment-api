@@ -71,6 +71,5 @@ namespace PaymentApi.Controllers
             return Ok(payment);
         }
     }
-    public record ProcessPaymentRequest(Guid CorrelationId, Guid OrderId, decimal Amount);
     public record RefundPaymentRequest(Guid OrderId);
 }
