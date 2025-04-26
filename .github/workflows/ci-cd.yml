@@ -26,9 +26,12 @@ jobs:
         run: dotnet nuget add source "${{ secrets.BAGET_URL }}" --name DevOpsNuGet --username user --password "${{ secrets.BAGET_API_KEY }}" --store-password-in-clear-text
       # --- END: Thêm nguồn NuGet riêng ---
 
+      - name: Clean solution
+        run: dotnet clean
+
       # --- BEGIN: Tách Restore, Build, Test ---
       - name: Restore dependencies
-        run: dotnet restore # Lệnh này sẽ sử dụng nguồn DevOpsNuGet đã thêm
+        run: dotnet restore -v d # Lệnh này sẽ sử dụng nguồn DevOpsNuGet đã thêm
 
       - name: Build
         run: dotnet build --no-restore # Không cần restore lại
