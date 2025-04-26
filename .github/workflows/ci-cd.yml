@@ -51,15 +51,30 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }} # Đảm bảo đây là Access Token, không phải mật khẩu Docker Hub
 
-      - name: Build and push Docker image
+      - name: Build Docker image
+        id: docker_build # Đặt ID cho step này
         env:
-          RELEASE: payment-api # Nên định nghĩa biến này ở cấp job hoặc workflow nếu dùng nhiều lần
+          RELEASE: payment-api
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }} # Đảm bảo username là chữ thường
         run: |
+          image_tag=${{ steps.set_tag.outputs.image_tag }}
+          full_image_ref="$DOCKER_USERNAME/$RELEASE:$image_tag"
+          echo "Building image with tag: $full_image_ref"
           docker build \
             --build-arg BAGET_URL=${{ secrets.BAGET_URL }} \
             --build-arg BAGET_API_KEY=${{ secrets.BAGET_API_KEY }} \
-            -t ${{ secrets.DOCKER_USERNAME }}/$RELEASE:${{ steps.set_tag.outputs.image_tag }} .
-          docker push ${{ secrets.DOCKER_USERNAME }}/$RELEASE:${{ steps.set_tag.outputs.image_tag }}}
+            -t "$full_image_ref" .
+          # Lưu tên image vào output để bước sau sử dụng
+          echo "image_ref=$full_image_ref" >> $GITHUB_OUTPUT
+
+      - name: Push Docker image
+        env:
+          # Lấy tên image từ output của bước trước
+          IMAGE_TO_PUSH: ${{ steps.docker_build.outputs.image_ref }}
+        run: |
+          echo "Attempting to push image: $IMAGE_TO_PUSH"
+          docker push "$IMAGE_TO_PUSH"
+          echo "Docker push command completed." # Sẽ không chạy nếu push lỗi
 
   deploy:
     needs: build
