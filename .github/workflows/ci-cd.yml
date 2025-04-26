@@ -14,31 +14,43 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Cần thiết nếu bạn dùng versioning dựa trên commit history
 
       - name: Setup .NET Core
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 8.0
+          dotnet-version: 8.0 # Đảm bảo khớp với phiên bản dự án của bạn
 
-      - name: Build and test
-        run: |
-          dotnet build
-          dotnet test
+      # --- BEGIN: Thêm nguồn NuGet riêng ---
+      - name: Add private NuGet source
+        run: dotnet nuget add source "${{ secrets.BAGET_URL }}" --name DevOpsNuGet --username user --password "${{ secrets.BAGET_API_KEY }}" --store-password-in-clear-text
+      # --- END: Thêm nguồn NuGet riêng ---
+
+      # --- BEGIN: Tách Restore, Build, Test ---
+      - name: Restore dependencies
+        run: dotnet restore # Lệnh này sẽ sử dụng nguồn DevOpsNuGet đã thêm
+
+      - name: Build
+        run: dotnet build --no-restore # Không cần restore lại
+
+      - name: Test
+        run: dotnet test --no-restore # Không cần restore lại
+      # --- END: Tách Restore, Build, Test ---
 
       - name: Set image tag
         id: set_tag
+        # Sử dụng GITHUB_SHA là một cách phổ biến, đảm bảo tag là duy nhất
         run: echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          password: ${{ secrets.DOCKER_TOKEN }} # Đảm bảo đây là Access Token, không phải mật khẩu Docker Hub
 
       - name: Build and push Docker image
         env:
-          RELEASE: payment-api
+          RELEASE: payment-api # Nên định nghĩa biến này ở cấp job hoặc workflow nếu dùng nhiều lần
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/$RELEASE:${{ steps.set_tag.outputs.image_tag }} .
           docker push ${{ secrets.DOCKER_USERNAME }}/$RELEASE:${{ steps.set_tag.outputs.image_tag }}
@@ -50,10 +62,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Chỉ cần thiết nếu script deploy cần git history
 
       - name: Install cloudflared
         run: |
+          # Nên kiểm tra checksum hoặc dùng package manager nếu có thể để tăng bảo mật
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
           sudo mv cloudflared /usr/local/bin/
@@ -67,47 +80,49 @@ jobs:
       - name: Configure SSH with ProxyCommand
         run: |
           mkdir -p ~/.ssh
+          # Đảm bảo không có file config cũ gây xung đột
           echo "Host ssh.cuder.xyz
             User phongle
             ProxyCommand cloudflared access ssh --hostname %h
             IdentityFile /tmp/.ssh/id_rsa
-            StrictHostKeyChecking no
+            StrictHostKeyChecking no # Cân nhắc dùng yes và quản lý known_hosts nếu cần bảo mật cao hơn
           " > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
       - name: Copy values.yaml to server
         env:
-          RELEASE: payment-api
+          RELEASE: payment-api # Nên định nghĩa biến này ở cấp job nếu dùng nhiều lần
         run: |
+          # Đảm bảo đường dẫn ./helm/values.yaml là chính xác
           scp ./helm/values.yaml ssh.cuder.xyz:/tmp/$RELEASE-values.yaml
 
       - name: Apply Kubernetes deployment
+        # Chạy các lệnh phức tạp qua SSH có thể khó debug, cân nhắc dùng script trên server
         run: |
           ssh ssh.cuder.xyz "
+            set -e # Thoát ngay khi có lỗi
+
             RELEASE=payment-api
             NAMESPACE=devops
+            REPO=${{ secrets.DOCKER_USERNAME }}/\$RELEASE # Lấy repo từ secret
+            TAG=${{ needs.build.outputs.image_tag }} # Lấy tag từ output của job build
 
-            if helm ls -n \$NAMESPACE | grep -q \$RELEASE; then
-              echo 'Force deleting stuck pods...'
-              kubectl get pods -n \$NAMESPACE -o json | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | .metadata.name' | while read pod; do
-                echo Deleting stuck pod: \$pod
-                kubectl delete pod \$pod -n \$NAMESPACE --grace-period=0 --force
-              done
-              
-              echo 'Uninstalling existing Helm release...'
-              helm uninstall \$RELEASE -n \$NAMESPACE
-
-              echo 'Waiting for old pods to terminate...'
-              while kubectl get pods -n \$NAMESPACE | grep \$RELEASE; do
-                sleep 3
-              done
+            echo 'Checking for existing Helm release...'
+            if helm status \$RELEASE -n \$NAMESPACE > /dev/null 2>&1; then
+              echo 'Uninstalling existing Helm release \$RELEASE in namespace \$NAMESPACE...'
+              helm uninstall \$RELEASE -n \$NAMESPACE --wait # Thêm --wait để chờ tài nguyên bị xóa
+            else
+              echo 'No existing Helm release found.'
             fi
 
-            echo 'Installing Helm chart...'
+            echo 'Installing/Upgrading Helm chart \$RELEASE...'
             helm upgrade --install \$RELEASE devops-charts/dotnet-core-api \
               --namespace \$NAMESPACE --create-namespace \
               -f /tmp/\$RELEASE-values.yaml \
-              --set image.repository=${{ secrets.DOCKER_USERNAME }}/\$RELEASE \
-              --set image.tag=${{ needs.build.outputs.image_tag }} \
-              --set image.pullPolicy=Always
+              --set image.repository=\$REPO \
+              --set image.tag=\$TAG \
+              --set image.pullPolicy=Always \
+              --wait # Thêm --wait để chờ deployment sẵn sàng (tùy chọn)
+
+            echo 'Deployment finished.'
           "
