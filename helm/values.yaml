@@ -12,14 +12,18 @@ nameOverride: "payment-api"
 imagePullSecrets:
   - name: regcred
 
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
-
 service:
   type: ClusterIP
-  port: 8081
+  port: 8080
   targetPort: 8080
-  name: payment-api-service
+  name: payment-api-service 
+
+# Tên deployment tùy chỉnh
+deployment:
+  name: payment-api-deployment
+
+# Annotations để force redeploy
+podAnnotations: {}
 
 # Tên ingress tùy chỉnh
 ingress:
@@ -32,6 +36,7 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Thêm annotation để xử lý path của Swagger UI
     nginx.ingress.kubernetes.io/rewrite-target: /$2
   tls: true
   extraTls:
@@ -40,14 +45,14 @@ ingress:
       secretName: payment-api-tls
 
 containerPorts:
-  http: 8081
+  http: 8080
 
 # Môi trường từ Secret
 extraEnvVarsFromSecret:
   - secretName: payment-api-secret
     name: ConnectionStrings__DefaultConnection
     envVar: ConnectionStrings__DefaultConnection
-
+    
   - secretName: shared-secret
     name: SmtpMail__UserName
     envVar: SmtpMail__UserName
@@ -134,7 +139,6 @@ extraEnvVarsFromConfigMap:
 extraEnvVars:
   - name: ASPNETCORE_ENVIRONMENT
     value: "Production"
-
 
 resources:
   limits:
