@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using PaymentApi.Consumers;
 using PaymentApi.Data;
-using SharedContracts.Events;
 using StackExchange.Redis;
 using System.Reflection;
+using SharedContracts.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -127,12 +127,6 @@ builder.Services.AddMassTransit(x =>
         {
             e.ConfigureConsumer<PaymentConsumer>(context);
 
-            // Ensure the correct message type is being handled
-            e.Consumer<PaymentConsumer>(context, c =>
-            {
-                c.Message<CompensatePayment>(m => { });
-            });
-
             // Endpoint-specific retry policy
             e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
 
@@ -147,7 +141,7 @@ builder.Services.AddMassTransit(x =>
             // Simple handler to log dead-lettered messages
             e.Handler<object>(async context =>
             {
-                var logger = context.GetPayload<ILogger<object>>();
+                var logger = context.GetPayload<ILogger<DeadLetterMessage>>();
                 logger.LogError("Dead-lettered payment message received: {MessageId}", context.MessageId);
                 // Additional handling logic can be added here (alerts, manual intervention, etc.)
             });
