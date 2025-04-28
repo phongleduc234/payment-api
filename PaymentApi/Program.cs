@@ -139,11 +139,11 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("payment-dead-letter-queue", e =>
         {
             // Simple handler to log dead-lettered messages
-            e.Handler<object>(async context =>
+            e.Handler<DeadLetterMessage>(async context =>
             {
                 var logger = context.GetPayload<ILogger<DeadLetterMessage>>();
-                logger.LogError("Dead-lettered payment message received: {MessageId}", context.MessageId);
-                // Additional handling logic can be added here (alerts, manual intervention, etc.)
+                logger.LogError("Dead-lettered payment message received: {MessageId}", context.Message.MessageId);
+                // Thêm xử lý
             });
 
             // Bind to all dead letter queues in this service
