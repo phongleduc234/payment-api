@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using PaymentApi.Consumers;
 using PaymentApi.Data;
+using SharedContracts.Events;
 using StackExchange.Redis;
 using System.Reflection;
 
@@ -83,17 +84,14 @@ builder.Services.AddMassTransit(x =>
     // Register the PaymentConsumer that handles payment processing and compensation
     x.AddConsumer<PaymentConsumer>();
 
-    // Configure RabbitMQ as the message broker
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Get RabbitMQ configuration from appsettings
         var rabbitConfig = builder.Configuration.GetSection("RabbitMq");
         var host = rabbitConfig["Host"] ?? "localhost";
         var port = rabbitConfig.GetValue<int>("Port", 5672);
         var username = rabbitConfig["UserName"] ?? "guest";
         var password = rabbitConfig["Password"] ?? "guest";
 
-        // Configure the RabbitMQ host
         cfg.Host(new Uri($"rabbitmq://{host}:{port}"), h =>
         {
             h.Username(username);
@@ -125,11 +123,15 @@ builder.Services.AddMassTransit(x =>
                 dlq => dlq.Durable = true);
         });
 
-        // Endpoint for handling payment compensation commands from Saga
         cfg.ReceiveEndpoint("compensate-payment", e =>
         {
-            // Configure the endpoint to use PaymentConsumer for CompensatePayment
             e.ConfigureConsumer<PaymentConsumer>(context);
+
+            // Ensure the correct message type is being handled
+            e.Consumer<PaymentConsumer>(context, c =>
+            {
+                c.Message<CompensatePayment>(m => { });
+            });
 
             // Endpoint-specific retry policy
             e.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
